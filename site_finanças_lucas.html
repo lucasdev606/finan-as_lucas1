@@ -1,0 +1,188 @@
+<!-- Adicione este script no topo do seu <head> ou antes do seu <script> principal -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+    // --- CONFIGURAÇÃO SUPABASE ---
+    const SUPABASE_URL = ''; // Preencha aqui
+    const SUPABASE_ANON_KEY = ''; // Preencha aqui
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let transactions = [];
+    const months = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+    let currentFilter = { month: 'all', category: 'all' };
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        renderMonths();
+        await fetchTransactions(); // Puxa dados reais do banco
+        initCharts();
+    });
+
+    // Função para buscar dados do Supabase
+    async function fetchTransactions() {
+        const { data, error } = await supabase
+            .from('transactions')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Erro ao buscar:', error);
+        } else {
+            // Mapeamos os campos para manter compatibilidade com seu código visual
+            transactions = data.map(item => ({
+                id: item.id,
+                desc: item.description,
+                amount: parseFloat(item.amount),
+                type: item.type,
+                category: item.category,
+                month: item.month
+            }));
+            updateUI();
+        }
+    }
+
+    // Função para salvar no Supabase
+    document.getElementById('transaction-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const newTrans = {
+            description: document.getElementById('desc').value,
+            amount: parseFloat(document.getElementById('amount').value),
+            type: document.getElementById('type').value,
+            category: document.getElementById('cat-select').value,
+            month: document.getElementById('month-select').value
+        };
+
+        const { data, error } = await supabase
+            .from('transactions')
+            .insert([newTrans])
+            .select();
+
+        if (error) {
+            alert('Erro ao salvar no banco de dados!');
+            console.error(error);
+        } else {
+            // Limpa o formulário e atualiza a lista localmente para performance
+            e.target.reset();
+            await fetchTransactions(); 
+        }
+    });
+
+    // --- LOGICA DE UI (MANTIDA DO ANTERIOR COM ADAPTAÇÕES) ---
+
+    function renderMonths() {
+        const list = document.getElementById('months-list');
+        const select = document.getElementById('month-select');
+        months.forEach(m => {
+            list.innerHTML += `<div class="nav-item" onclick="filterMonth('${m}')">📅 ${m}</div>`;
+            select.innerHTML += `<option value="${m}">${m}</option>`;
+        });
+    }
+
+    function updateUI() {
+        const tbody = document.getElementById('table-body');
+        tbody.innerHTML = '';
+
+        const filtered = transactions.filter(t => {
+            const mMatch = currentFilter.month === 'all' || t.month === currentFilter.month;
+            const cMatch = currentFilter.category === 'all' || t.category === currentFilter.category;
+            return mMatch && cMatch;
+        });
+
+        filtered.forEach(t => {
+            const row = document.createElement('tr');
+            row.className = 'fade-in';
+            row.innerHTML = `
+                <td>${t.desc}</td>
+                <td><span style="color:#aaa; font-size:0.8rem">${t.category}</span></td>
+                <td>${t.month}</td>
+                <td class="${t.type === 'entrada' ? 'val-entrada' : 'val-saida'}">
+                    ${t.type === 'entrada' ? '+' : '-'} R$ ${t.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+
+        updateBalance();
+        if(window.mainChart) updateCharts();
+    }
+
+    function updateBalance() {
+        const total = transactions.reduce((acc, t) => {
+            return t.type === 'entrada' ? acc + t.amount : acc - t.amount;
+        }, 0);
+        const el = document.getElementById('total-balance');
+        el.innerText = `R$ ${total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+        el.className = total >= 0 ? 'val-entrada' : 'val-saida';
+    }
+
+    function filterMonth(month) {
+        currentFilter.month = month;
+        currentFilter.category = 'all';
+        document.getElementById('view-title').innerText = `Relatório: ${month}`;
+        updateUI();
+    }
+
+    function filterCategory(cat) {
+        currentFilter.category = cat;
+        currentFilter.month = 'all';
+        document.getElementById('view-title').innerText = `Categoria: ${cat}`;
+        updateUI();
+    }
+
+    function changeView(view) {
+        currentFilter = { month: 'all', category: 'all' };
+        document.getElementById('view-title').innerText = "Dashboard Geral";
+        updateUI();
+    }
+
+    // --- GRÁFICOS ---
+    function initCharts() {
+        const ctx1 = document.getElementById('mainChart').getContext('2d');
+        const ctx2 = document.getElementById('pieChart').getContext('2d');
+
+        window.mainChart = new Chart(ctx1, {
+            type: 'line',
+            data: {
+                labels: months,
+                datasets: [{
+                    label: 'Fluxo de Caixa',
+                    data: Array(12).fill(0),
+                    borderColor: '#9d4edd',
+                    backgroundColor: 'rgba(157, 78, 221, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: { plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#222' } } } }
+        });
+
+        window.pieChart = new Chart(ctx2, {
+            type: 'doughnut',
+            data: {
+                labels: ['Entradas', 'Saídas'],
+                datasets: [{
+                    data: [1, 1],
+                    backgroundColor: ['#2ecc71', '#e74c3c'],
+                    borderWidth: 0
+                }]
+            }
+        });
+        updateCharts();
+    }
+
+    function updateCharts() {
+        const monthlyData = months.map(m => {
+            return transactions.filter(t => t.month === m)
+                .reduce((acc, t) => t.type === 'entrada' ? acc + t.amount : acc - t.amount, 0);
+        });
+
+        const totalEntradas = transactions.filter(t => t.type === 'entrada').reduce((acc, t) => acc + t.amount, 0);
+        const totalSaidas = transactions.filter(t => t.type === 'saida').reduce((acc, t) => acc + t.amount, 0);
+
+        window.mainChart.data.datasets[0].data = monthlyData;
+        window.mainChart.update();
+
+        window.pieChart.data.datasets[0].data = [totalEntradas, totalSaidas];
+        window.pieChart.update();
+    }
+</script>
