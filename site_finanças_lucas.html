@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finance Pro Dashboard | 2026</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-body: #0a0a0c;
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --neon-purple: #9d4edd;
+            --neon-green: #2ecc71;
+            --neon-red: #e74c3c;
+            --text-main: #e0e0e0;
+            --sidebar-w: 260px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Roboto, sans-serif; }
+
+        body {
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* --- SIDEBAR --- */
+        aside {
+            width: var(--sidebar-w);
+            background: rgba(15, 15, 18, 0.95);
+            border-right: 1px solid var(--glass-border);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow-y: auto;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--neon-purple);
+            text-shadow: 0 0 10px rgba(157, 78, 221, 0.5);
+            margin-bottom: 20px;
+        }
+
+        .nav-section { margin-bottom: 15px; }
+        .nav-section h4 { 
+            font-size: 0.75rem; 
+            text-transform: uppercase; 
+            color: #666; 
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+
+        .nav-item {
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            border: 1px solid transparent;
+        }
+
+        .nav-item:hover {
+            background: var(--glass-bg);
+            border-color: var(--neon-purple);
+            box-shadow: 0 0 15px rgba(157, 78, 221, 0.2);
+        }
+
+        .nav-item.active {
+            background: var(--neon-purple);
+            color: white;
+        }
+
+        /* --- MAIN CONTENT --- */
+        main {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+            background: radial-gradient(circle at top right, #1a1a2e, #0a0a0c);
+        }
+
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        /* --- FORM --- */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        input, select {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--glass-border);
+            padding: 12px;
+            border-radius: 8px;
+            color: white;
+            outline: none;
+        }
+
+        button.btn-add {
+            background: var(--neon-purple);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+
+        button.btn-add:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(157, 78, 221, 0.4); }
+
+        /* --- TABLE --- */
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th { text-align: left; padding: 15px; border-bottom: 1px solid var(--glass-border); color: #888; }
+        td { padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.02); }
+
+        .val-entrada { color: var(--neon-green); font-weight: bold; }
+        .val-saida { color: var(--neon-red); font-weight: bold; }
+
+        .fade-in { animation: fadeIn 0.6s ease forwards; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* --- CHARTS WRAPPER --- */
+        .charts-container {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+        }
+
+        .summary-box { font-size: 1.5rem; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <aside>
+        <div class="logo">FINANCE.AI</div>
+        
+        <div class="nav-section">
+            <h4>Visão Geral</h4>
+            <div class="nav-item active" onclick="changeView('overview')">📊 Dashboard</div>
+        </div>
+
+        <div class="nav-section">
+            <h4>Meses</h4>
+            <div id="months-list">
+                <!-- Gerado por JS -->
+            </div>
+        </div>
+
+        <div class="nav-section">
+            <h4>Categorias</h4>
+            <div id="categories-list">
+                <div class="nav-item" onclick="filterCategory('Moradia')">🏠 Moradia</div>
+                <div class="nav-item" onclick="filterCategory('Aluguel')">🔑 Aluguel</div>
+                <div class="nav-item" onclick="filterCategory('Luz')">⚡ Conta de Luz</div>
+            </div>
+            <button onclick="addCategory()" style="background:none; border:1px dashed #444; color:#888; width:100%; padding:5px; cursor:pointer; border-radius:5px; margin-top:10px;">+ Nova Categoria</button>
+        </div>
+    </aside>
+
+    <main>
+        <div class="header-top">
+            <h2 id="view-title">Dashboard Geral</h2>
+            <div class="glass-card" style="padding: 10px 20px; margin:0;">
+                Saldo: <span id="total-balance" class="val-entrada">R$ 0,00</span>
+            </div>
+        </div>
+
+        <div id="overview-content">
+            <div class="charts-container">
+                <div class="glass-card">
+                    <canvas id="mainChart" height="150"></canvas>
+                </div>
+                <div class="glass-card">
+                    <p>Distribuição</p>
+                    <canvas id="pieChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-card">
+            <h3>Nova Transação</h3>
+            <form id="transaction-form" class="form-grid" style="margin-top:15px;">
+                <input type="text" id="desc" placeholder="Nome do gasto/ganho" required>
+                <input type="number" id="amount" placeholder="Valor (R$)" required>
+                <select id="type">
+                    <option value="entrada">Entrada</option>
+                    <option value="saida">Saída</option>
+                </select>
+                <select id="cat-select">
+                    <option value="Moradia">Moradia</option>
+                    <option value="Aluguel">Aluguel</option>
+                    <option value="Luz">Luz</option>
+                    <option value="Outros">Outros</option>
+                </select>
+                <select id="month-select">
+                    <!-- Gerado por JS -->
+                </select>
+                <button type="submit" class="btn-add">Salvar</button>
+            </form>
+        </div>
+
+        <div class="glass-card">
+            <h3>Histórico de Lançamentos</h3>
+            <table id="transactions-table">
+                <thead>
+                    <tr>
+                        <th>Descrição</th>
+                        <th>Categoria</th>
+                        <th>Mês</th>
+                        <th>Valor</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body">
+                    <!-- Dinâmico -->
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <script>
+        // Estado da Aplicação
+        let transactions = JSON.parse(localStorage.getItem('finances')) || [];
+        const months = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+        let currentFilter = { month: 'all', category: 'all' };
+
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', () => {
+            renderMonths();
+            updateUI();
+            initCharts();
+        });
+
+        function renderMonths() {
+            const list = document.getElementById('months-list');
+            const select = document.getElementById('month-select');
+            months.forEach(m => {
+                list.innerHTML += `<div class="nav-item" onclick="filterMonth('${m}')">📅 ${m}</div>`;
+                select.innerHTML += `<option value="${m}">${m}</option>`;
+            });
+        }
+
+        // Cadastro de Transação
+        document.getElementById('transaction-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const newTrans = {
+                id: Date.now(),
+                desc: document.getElementById('desc').value,
+                amount: parseFloat(document.getElementById('amount').value),
+                type: document.getElementById('type').value,
+                category: document.getElementById('cat-select').value,
+                month: document.getElementById('month-select').value
+            };
+
+            transactions.push(newTrans);
+            localStorage.setItem('finances', JSON.stringify(transactions));
+            e.target.reset();
+            updateUI();
+        });
+
+        function updateUI() {
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+
+            const filtered = transactions.filter(t => {
+                const mMatch = currentFilter.month === 'all' || t.month === currentFilter.month;
+                const cMatch = currentFilter.category === 'all' || t.category === currentFilter.category;
+                return mMatch && cMatch;
+            });
+
+            filtered.reverse().forEach(t => {
+                const row = document.createElement('tr');
+                row.className = 'fade-in';
+                row.innerHTML = `
+                    <td>${t.desc}</td>
+                    <td><span style="color:#aaa; font-size:0.8rem">${t.category}</span></td>
+                    <td>${t.month}</td>
+                    <td class="${t.type === 'entrada' ? 'val-entrada' : 'val-saida'}">
+                        ${t.type === 'entrada' ? '+' : '-'} R$ ${t.amount.toFixed(2)}
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            updateBalance();
+            if(window.mainChart) updateCharts();
+        }
+
+        function updateBalance() {
+            const total = transactions.reduce((acc, t) => {
+                return t.type === 'entrada' ? acc + t.amount : acc - t.amount;
+            }, 0);
+            const el = document.getElementById('total-balance');
+            el.innerText = `R$ ${total.toLocaleString('pt-BR')}`;
+            el.className = total >= 0 ? 'val-entrada' : 'val-saida';
+        }
+
+        // Filtros Estilo Power BI
+        function filterMonth(month) {
+            currentFilter.month = month;
+            currentFilter.category = 'all';
+            document.getElementById('view-title').innerText = `Relatório: ${month}`;
+            updateUI();
+        }
+
+        function filterCategory(cat) {
+            currentFilter.category = cat;
+            currentFilter.month = 'all';
+            document.getElementById('view-title').innerText = `Categoria: ${cat}`;
+            updateUI();
+        }
+
+        function changeView(view) {
+            currentFilter = { month: 'all', category: 'all' };
+            document.getElementById('view-title').innerText = "Dashboard Geral";
+            updateUI();
+        }
+
+        function addCategory() {
+            const name = prompt("Nome da nova categoria:");
+            if(name) {
+                const div = document.createElement('div');
+                div.className = 'nav-item';
+                div.innerHTML = `📁 ${name}`;
+                div.onclick = () => filterCategory(name);
+                document.getElementById('categories-list').appendChild(div);
+                
+                const opt = document.createElement('option');
+                opt.value = name; opt.innerText = name;
+                document.getElementById('cat-select').appendChild(opt);
+            }
+        }
+
+        // --- GRÁFICOS (Power BI Style) ---
+        function initCharts() {
+            const ctx1 = document.getElementById('mainChart').getContext('2d');
+            const ctx2 = document.getElementById('pieChart').getContext('2d');
+
+            window.mainChart = new Chart(ctx1, {
+                type: 'line',
+                data: {
+                    labels: months,
+                    datasets: [{
+                        label: 'Fluxo de Caixa',
+                        data: Array(12).fill(0),
+                        borderColor: '#9d4edd',
+                        backgroundColor: 'rgba(157, 78, 221, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: { plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#222' } } } }
+            });
+
+            window.pieChart = new Chart(ctx2, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Entradas', 'Saídas'],
+                    datasets: [{
+                        data: [1, 1],
+                        backgroundColor: ['#2ecc71', '#e74c3c'],
+                        borderWidth: 0
+                    }]
+                }
+            });
+            updateCharts();
+        }
+
+        function updateCharts() {
+            const monthlyData = months.map(m => {
+                return transactions.filter(t => t.month === m)
+                    .reduce((acc, t) => t.type === 'entrada' ? acc + t.amount : acc - t.amount, 0);
+            });
+
+            const totalEntradas = transactions.filter(t => t.type === 'entrada').reduce((acc, t) => acc + t.amount, 0);
+            const totalSaidas = transactions.filter(t => t.type === 'saida').reduce((acc, t) => acc + t.amount, 0);
+
+            window.mainChart.data.datasets[0].data = monthlyData;
+            window.mainChart.update();
+
+            window.pieChart.data.datasets[0].data = [totalEntradas, totalSaidas];
+            window.pieChart.update();
+        }
+    </script>
+</body>
+</html>
