@@ -114,6 +114,8 @@
             outline: none;
         }
 
+        input:focus, select:focus { border-color: var(--neon-purple); }
+
         button.btn-add {
             background: var(--neon-purple);
             color: white;
@@ -124,6 +126,8 @@
             font-weight: bold;
             transition: 0.3s;
         }
+
+        button.btn-add:hover { opacity: 0.8; transform: scale(1.02); }
 
         /* --- TABELA --- */
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
@@ -137,6 +141,12 @@
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
         .charts-container { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+
+        @media (max-width: 768px) {
+            .charts-container { grid-template-columns: 1fr; }
+            body { flex-direction: column; overflow-y: auto; }
+            aside { width: 100%; height: auto; border-right: none; border-bottom: 1px solid var(--glass-border); }
+        }
     </style>
 </head>
 <body>
@@ -146,7 +156,7 @@
         
         <div class="nav-section">
             <h4>Principal</h4>
-            <div class="nav-item active" onclick="location.reload()">📊 Visão Geral</div>
+            <div class="nav-item active" onclick="resetFilters()">📊 Visão Geral</div>
         </div>
 
         <div class="nav-section">
@@ -160,6 +170,7 @@
                 <div class="nav-item" onclick="filterCategory('Moradia')">🏠 Moradia</div>
                 <div class="nav-item" onclick="filterCategory('Aluguel')">🔑 Aluguel</div>
                 <div class="nav-item" onclick="filterCategory('Luz')">⚡ Luz</div>
+                <div class="nav-item" onclick="filterCategory('Outros')">📦 Outros</div>
             </div>
         </div>
     </aside>
@@ -193,7 +204,7 @@
                     <option value="Outros">Outros</option>
                 </select>
                 <select id="month-select"></select>
-                <button type="submit" class="btn-add">Salvar</button>
+                <button type="submit" class="btn-add" id="btn-save">Salvar</button>
             </form>
         </div>
 
@@ -213,6 +224,7 @@
     </main>
 
     <script>
+        // CONFIGURAÇÕES SUPABASE
         const SUPABASE_URL = 'https://graakrvphxxdqpceesjb.supabase.co'; 
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdyYWFrcnZwaHh4ZHFwY2Vlc2piIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyOTAzMjAsImV4cCI6MjA5NDg2NjMyMH0.Zf9Ntk4zXYIEwH0GSiKpTaExcQUqFtHiSm5CvRscgNM';
         const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -221,26 +233,42 @@
         const months = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
         let currentFilter = { month: 'all', category: 'all' };
 
+        // Inicialização
         document.addEventListener('DOMContentLoaded', async () => {
             renderMonths();
             await fetchTransactions();
             initCharts();
         });
 
+        // Buscar dados
         async function fetchTransactions() {
-            const { data, error } = await _supabase.from('transactions').select('*').order('created_at', { ascending: false });
-            if (error) console.error(error);
-            else {
+            const { data, error } = await _supabase
+                .from('transactions')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error("Erro ao buscar:", error);
+            } else {
                 transactions = data.map(item => ({
-                    id: item.id, desc: item.description, amount: parseFloat(item.amount),
-                    type: item.type, category: item.category, month: item.month
+                    id: item.id, 
+                    desc: item.description, 
+                    amount: parseFloat(item.amount),
+                    type: item.type, 
+                    category: item.category, 
+                    month: item.month
                 }));
                 updateUI();
             }
         }
 
+        // Salvar Transação (CORRIGIDO)
         document.getElementById('transaction-form').addEventListener('submit', async (e) => {
             e.preventDefault();
+            const btn = document.getElementById('btn-save');
+            btn.innerText = "Salvando...";
+            btn.disabled = true;
+
             const newTrans = {
                 description: document.getElementById('desc').value,
                 amount: parseFloat(document.getElementById('amount').value),
@@ -248,14 +276,30 @@
                 category: document.getElementById('cat-select').value,
                 month: document.getElementById('month-select').value
             };
-            const { error } = await _supabase.from('transactions').insert([newTrans]);
-            if (error) alert("Erro ao salvar!");
-            else { e.target.reset(); await fetchTransactions(); }
+
+            const { data, error } = await _supabase
+                .from('transactions')
+                .insert([newTrans])
+                .select();
+
+            if (error) {
+                console.error("Erro Supabase:", error);
+                alert("Erro ao salvar no banco de dados: " + error.message);
+            } else {
+                console.log("Salvo com sucesso:", data);
+                e.target.reset(); 
+                await fetchTransactions();
+            }
+            
+            btn.innerText = "Salvar";
+            btn.disabled = false;
         });
 
         function renderMonths() {
             const list = document.getElementById('months-list');
             const select = document.getElementById('month-select');
+            list.innerHTML = '';
+            select.innerHTML = '';
             months.forEach(m => {
                 list.innerHTML += `<div class="nav-item" onclick="filterMonth('${m}')">📅 ${m}</div>`;
                 select.innerHTML += `<option value="${m}">${m}</option>`;
@@ -265,6 +309,7 @@
         function updateUI() {
             const tbody = document.getElementById('table-body');
             tbody.innerHTML = '';
+            
             const filtered = transactions.filter(t => 
                 (currentFilter.month === 'all' || t.month === currentFilter.month) &&
                 (currentFilter.category === 'all' || t.category === currentFilter.category)
@@ -273,10 +318,16 @@
             filtered.forEach(t => {
                 const row = document.createElement('tr');
                 row.className = 'fade-in';
-                row.innerHTML = `<td>${t.desc}</td><td>${t.category}</td><td>${t.month}</td>
-                    <td class="${t.type === 'entrada' ? 'val-entrada' : 'val-saida'}">R$ ${t.amount.toFixed(2)}</td>`;
+                row.innerHTML = `
+                    <td>${t.desc}</td>
+                    <td>${t.category}</td>
+                    <td>${t.month}</td>
+                    <td class="${t.type === 'entrada' ? 'val-entrada' : 'val-saida'}">
+                        ${t.type === 'entrada' ? '+' : '-'} R$ ${t.amount.toFixed(2)}
+                    </td>`;
                 tbody.appendChild(row);
             });
+
             updateBalance();
             if(window.mainChart) updateCharts();
         }
@@ -288,28 +339,79 @@
             el.className = total >= 0 ? 'val-entrada' : 'val-saida';
         }
 
-        function filterMonth(m) { currentFilter.month = m; currentFilter.category = 'all'; document.getElementById('view-title').innerText = m; updateUI(); }
-        function filterCategory(c) { currentFilter.category = c; currentFilter.month = 'all'; document.getElementById('view-title').innerText = c; updateUI(); }
+        function resetFilters() {
+            currentFilter = { month: 'all', category: 'all' };
+            document.getElementById('view-title').innerText = "Dashboard Geral";
+            updateUI();
+        }
 
+        function filterMonth(m) { 
+            currentFilter.month = m; 
+            currentFilter.category = 'all'; 
+            document.getElementById('view-title').innerText = "Mês: " + m; 
+            updateUI(); 
+        }
+        
+        function filterCategory(c) { 
+            currentFilter.category = c; 
+            currentFilter.month = 'all'; 
+            document.getElementById('view-title').innerText = "Categoria: " + c; 
+            updateUI(); 
+        }
+
+        // Gráficos
         function initCharts() {
-            window.mainChart = new Chart(document.getElementById('mainChart'), {
+            const ctxLine = document.getElementById('mainChart').getContext('2d');
+            const ctxPie = document.getElementById('pieChart').getContext('2d');
+
+            window.mainChart = new Chart(ctxLine, {
                 type: 'line',
-                data: { labels: months, datasets: [{ label: 'Saldo', data: Array(12).fill(0), borderColor: '#9d4edd', tension: 0.4 }] },
-                options: { plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#222' } } } }
+                data: { 
+                    labels: months, 
+                    datasets: [{ 
+                        label: 'Saldo Mensal', 
+                        data: Array(12).fill(0), 
+                        borderColor: '#9d4edd', 
+                        backgroundColor: 'rgba(157, 78, 221, 0.1)',
+                        fill: true,
+                        tension: 0.4 
+                    }] 
+                },
+                options: { 
+                    responsive: true,
+                    plugins: { legend: { display: false } }, 
+                    scales: { y: { grid: { color: '#222' }, ticks: { color: '#888' } }, x: { ticks: { color: '#888' } } } 
+                }
             });
-            window.pieChart = new Chart(document.getElementById('pieChart'), {
+
+            window.pieChart = new Chart(ctxPie, {
                 type: 'doughnut',
-                data: { labels: ['Entradas', 'Saídas'], datasets: [{ data: [0, 0], backgroundColor: ['#2ecc71', '#e74c3c'] }] }
+                data: { 
+                    labels: ['Entradas', 'Saídas'], 
+                    datasets: [{ 
+                        data: [0, 0], 
+                        backgroundColor: ['#2ecc71', '#e74c3c'],
+                        borderWidth: 0
+                    }] 
+                },
+                options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#888' } } } }
             });
             updateCharts();
         }
 
         function updateCharts() {
-            const monthlyData = months.map(m => transactions.filter(t => t.month === m).reduce((acc, t) => t.type === 'entrada' ? acc + t.amount : acc - t.amount, 0));
+            const monthlyData = months.map(m => {
+                return transactions
+                    .filter(t => t.month === m)
+                    .reduce((acc, t) => t.type === 'entrada' ? acc + t.amount : acc - t.amount, 0);
+            });
+
             const ent = transactions.filter(t => t.type === 'entrada').reduce((acc, t) => acc + t.amount, 0);
             const sai = transactions.filter(t => t.type === 'saida').reduce((acc, t) => acc + t.amount, 0);
+
             window.mainChart.data.datasets[0].data = monthlyData;
             window.mainChart.update();
+
             window.pieChart.data.datasets[0].data = [ent, sai];
             window.pieChart.update();
         }
